@@ -3,4 +3,3 @@ pandas
 numpy
 openpyxl
 smtplib
-email.mime.text
