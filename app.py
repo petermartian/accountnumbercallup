@@ -2,118 +2,118 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import openpyxl as xl
-import smtplib
 import drawio_client as drawio
 
 
-def load_account_details(file_path):
-    """Loads account details from an Excel file into a Pandas DataFrame."""
-    try:
-        df = pd.read_excel(file_path)
-        return df
-    except FileNotFoundError:
-        st.error(f"Error: File not found at {file_path}")
-        return None
-
-def get_currencies_for_account(df, account_name):
-    """Returns a list of currencies associated with a given account name."""
-    if df is None or account_name == "":
-        return [""]
-    return [""] + list(df[df['ACCOUNT NAME'] == account_name]['CURRENCIES'].unique())
-
-def get_account_details(df, account_name=None, currency=None):
-    """Retrieves account details based on account name and/or currency."""
-    if df is None:
-        return None
-
-    query = []
-    if account_name and 'ACCOUNT NAME' in df.columns:
-        query.append(f"`ACCOUNT NAME` == '{account_name}'")
-    if currency and 'CURRENCIES' in df.columns:
-        query.append(f"`CURRENCIES` == '{currency}'")
-
-    if not query:
-        st.warning("Please select an Account Name and Currency.")
-        return None
-
-    query_string = " and ".join(query)
-    try:
-        filtered_df = df.query(query_string)
-        if not filtered_df.empty:
-            return filtered_df.iloc[0].to_dict()  # Return the first matching row as a dictionary
-        else:
-            st.warning("No matching account details found.")
-            return None
-    except pd.core.computation.ops.UndefinedVariableError as e:
-        st.error(f"Error: Column '{e.variable}' not found in the Excel file.")
-        return None
-    except Exception as e:
-        st.error(f"An error occurred during data retrieval: {e}")
-        return None
-
-def format_account_details(details):
-    """Formats the retrieved account details for communication."""
-    if details:
-        formatted_text = "Account Details:\n"
-        for key, value in details.items():
-            formatted_text += f"- {key}: {value}\n"
-        return formatted_text
-    return "No account details to display."
-
-def send_email(recipient_email, subject, body, sender_email, sender_password):
-    """Sends an email with the provided details."""
-    try:
-        msg = MIMEText(body)
-        msg['Subject'] = subject
-        msg['From'] = sender_email
-        msg['To'] = recipient_email
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, recipient_email, msg.as_string())
-        st.success(f"Email sent successfully to {recipient_email}")
-    except Exception as e:
-        st.error(f"Error sending email: {e}")
-
 def main():
-    st.title("Automated Account Details Retrieval")
+    st.title("Maker-Checker Process for Sending Funds")
 
-    st.sidebar.header("Configuration")
-    excel_file_path = st.sidebar.file_uploader("Upload Excel File (account concession sheet.xlsx)", type=["xlsx", "xls"])
+    process_steps = [
+        {"id": "start", "label": "Start", "shape": "ellipse"},
+        {"id": "maker_initiate", "label": "Maker Initiates Fund Transfer Request", "shape": "rectangle"},
+        {"id": "maker_enter_details", "label": "Enters Beneficiary Details, Amount, Purpose, etc.", "shape": "rectangle"},
+        {"id": "maker_submit", "label": "Submits Request for Approval", "shape": "rectangle"},
+        {"id": "checker_notify", "label": "Checker Receives Notification", "shape": "rectangle"},
+        {"id": "checker_review", "label": "Checker Reviews Transaction Details", "shape": "rectangle"},
+        {"id": "check_correct", "label": "Transaction Details Correct?", "shape": "rhombus"},
+        {"id": "checker_approve", "label": "Checker Approves Transaction", "shape": "rectangle"},
+        {"id": "transaction_processed", "label": "Transaction Processed (Funds Sent)", "shape": "rectangle", "style": "fillColor=#d5e8d4;strokeColor=#82b366;"},
+        {"id": "end_success", "label": "End", "shape": "ellipse"},
+        {"id": "checker_reject", "label": "Checker Rejects Transaction", "shape": "rectangle", "style": "fillColor=#f8cecc;strokeColor=#b85450;"},
+        {"id": "notify_maker_reject", "label": "Notification Sent to Maker with Reason for Rejection", "shape": "rectangle"},
+        {"id": "maker_review_reject", "label": "Maker Reviews Rejection and Corrects/Cancels Request", "shape": "rectangle"},
+        {"id": "repeat_or_end", "label": "Repeat or End", "shape": "ellipse"},
+    ]
 
-    if excel_file_path is not None:
-        df = load_account_details(excel_file_path)
+    connections = [
+        {"source": "start", "target": "maker_initiate"},
+        {"source": "maker_initiate", "target": "maker_enter_details"},
+        {"source": "maker_enter_details", "target": "maker_submit"},
+        {"source": "maker_submit", "target": "checker_notify"},
+        {"source": "checker_notify", "target": "checker_review"},
+        {"source": "checker_review", "target": "check_correct"},
+        {"source": "check_correct", "target": "checker_approve", "label": "Yes"},
+        {"source": "checker_approve", "target": "transaction_processed"},
+        {"source": "transaction_processed", "target": "end_success"},
+        {"source": "check_correct", "target": "checker_reject", "label": "No"},
+        {"source": "checker_reject", "target": "notify_maker_reject"},
+        {"source": "notify_maker_reject", "target": "maker_review_reject"},
+        {"source": "maker_review_reject", "target": "repeat_or_end"},
+        {"source": "repeat_or_end", "target": "maker_initiate", "label": "Repeat"}, # Optional: Loop back
+        {"source": "repeat_or_end", "target": "end_success", "label": "End"},    # Optional: End from repeat
+    ]
 
-        if df is not None:
-            st.sidebar.header("Filter Options")
-            account_names = [""] + list(df['ACCOUNT NAME'].unique()) if 'ACCOUNT NAME' in df.columns else ["No ACCOUNT NAME Column"]
-            selected_account_name = st.sidebar.selectbox("Select Account Name", account_names)
+    # Define swimlanes
+    swimlanes = [
+        {"id": "maker_lane", "label": "Maker"},
+        {"id": "checker_lane", "label": "Checker"},
+        {"id": "system_lane", "label": "System"},
+    ]
 
-            available_currencies = get_currencies_for_account(df, selected_account_name)
-            selected_currency = st.sidebar.selectbox("Select Currency", available_currencies)
+    # Assign steps to swimlanes (adjust as needed)
+    step_lanes = {
+        "start": "maker_lane",
+        "maker_initiate": "maker_lane",
+        "maker_enter_details": "maker_lane",
+        "maker_submit": "maker_lane",
+        "checker_notify": "checker_lane",
+        "checker_review": "checker_lane",
+        "check_correct": "checker_lane",
+        "checker_approve": "checker_lane",
+        "transaction_processed": "system_lane",
+        "end_success": "system_lane",
+        "checker_reject": "checker_lane",
+        "notify_maker_reject": "system_lane",
+        "maker_review_reject": "maker_lane",
+        "repeat_or_end": "maker_lane",
+    }
 
-            st.sidebar.header("Email Options")
-            send_email_option = st.sidebar.checkbox("Send Account Number via Email")
-            recipient_email = st.sidebar.text_input("Recipient Email")
-            sender_email = st.sidebar.text_input("Your Email Address")
-            sender_password = st.sidebar.text_input("Your Email Password", type="password")
+    # --- Option 1: Using a Placeholder for drawio (if direct rendering isn't available) ---
+    st.subheader("Diagram Placeholder")
+    st.info("This section would ideally display the draw.io diagram. You might need a specific Streamlit component or integration to render it directly from a definition.")
+    st.write("The process flow is described below.")
 
-            if st.button("Retrieve Account Details"):
-                details = get_account_details(df, selected_account_name, selected_currency)
-                formatted_details = format_account_details(details)
-                st.subheader("Retrieved Account Details:")
-                st.code(formatted_details, language="text")
+    # --- Option 2: Generating a drawio XML string (for download or external use) ---
+    xml_string = drawio.generate_xml(process_steps, connections, swimlanes=swimlanes, step_lanes=step_lanes)
+    st.download_button(
+        label="Download draw.io XML",
+        data=xml_string,
+        file_name="maker_checker_process.drawio.xml",
+        mime="application/xml"
+    )
 
-                if details and send_email_option and recipient_email and sender_email and sender_password:
-                    account_number = details.get('ACCOUNT NUMBER', 'N/A')
-                    email_subject = f"Account Details for {selected_account_name} ({selected_currency})"
-                    email_body = f"Please find the account number below:\n\nAccount Name: {selected_account_name}\nAccount Number: {account_number}\nCurrency: {selected_currency}\n\nBank: {details.get('BANK', 'N/A')}"
-                    send_email(recipient_email, email_subject, email_body, sender_email, sender_password)
-                elif send_email_option and not (recipient_email and sender_email and sender_password):
-                    st.warning("Please provide recipient email, your email address, and password to send an email.")
+    st.subheader("Process Flow Explanation:")
+    st.markdown("""
+    1.  **Start:** The process begins when there's a need to send funds.
 
-    else:
-        st.info("Please upload the Excel file named 'account concession sheet.xlsx' containing account details.")
+    2.  **Maker Initiates Fund Transfer Request:** An authorized user (the Maker) starts the process within the system.
+
+    3.  **Enters Beneficiary Details, Amount, Purpose, etc.:** The Maker inputs all necessary transaction details.
+
+    4.  **Submits Request for Approval:** The Maker submits the request, making it ready for the Checker's review.
+
+    5.  **Checker Receives Notification:** An authorized and different user (the Checker) is notified about the pending request.
+
+    6.  **Checker Reviews Transaction Details:** The Checker carefully examines all the entered information for accuracy and compliance.
+
+    7.  **Transaction Details Correct?:** The Checker makes a decision:
+        * **Yes:** If everything is correct, the process proceeds to approval.
+        * **No:** If there are errors or issues, the transaction is rejected.
+
+    8.  **Checker Approves Transaction:** The Checker approves the request in the system.
+
+    9.  **Transaction Processed (Funds Sent):** The system executes the fund transfer.
+
+    10. **End:** The fund transfer is successfully completed.
+
+    11. **Checker Rejects Transaction:** The Checker rejects the request, halting the process.
+
+    12. **Notification Sent to Maker with Reason for Rejection:** The Maker receives a notification explaining why their request was rejected.
+
+    13. **Maker Reviews Rejection and Corrects/Cancels Request:** The Maker reviews the feedback, makes necessary corrections, or cancels the request.
+
+    14. **Repeat or End:** The Maker can either resubmit the corrected request (going back to step 3 or 4) or decide to end the process.
+    """)
 
 if __name__ == "__main__":
     main()
