@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import openpyxl as xl
 import smtplib
-from email.mime.text import MIMEText
+import drawio_client as drawio
 
 
 def load_account_details(file_path):
